@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Wind, ArrowRight, ShieldCheck, Mail, Lock, User } from "lucide-react";
+import { Wind, ArrowRight, ShieldCheck, Mail, Lock, User, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import "../styles/auth.css";
 
@@ -10,54 +10,77 @@ function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState(null); // { type: 'success' | 'error', text: '' }
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  const clearForm = () => {
+    setEmail("");
+    setPassword("");
+    setFullName("");
+    setMessage(null);
+  };
 
-  const url = isSignUp
-    ? "http://localhost:5000/api/auth/signup"
-    : "http://localhost:5000/api/auth/login";
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage(null);
 
-  const body = isSignUp
-    ? {
-        fullName,
-        email,
-        password,
+    const url = isSignUp
+      ? "http://localhost:5000/api/auth/signup"
+      : "http://localhost:5000/api/auth/login";
+
+    const body = isSignUp
+      ? { fullName, email, password }
+      : { email, password };
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMessage({ type: "error", text: data.message });
+        setIsLoading(false);
+        return;
       }
-    : {
-        email,
-        password,
-      };
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      alert(data.message);
-      return;
+      if (isSignUp) {
+        // Signup success → show message and switch to login
+        setMessage({ type: "success", text: "Account created! Redirecting to login..." });
+        setIsLoading(false);
+        setTimeout(() => {
+          clearForm();
+          setIsSignUp(false);
+          setMessage({ type: "success", text: "Account created successfully. Please sign in." });
+        }, 1500);
+      } else {
+        // Login success → save user to localStorage and navigate
+        localStorage.setItem("cyclonex_user", JSON.stringify(data.user));
+        setMessage({ type: "success", text: "Login successful! Redirecting..." });
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 800);
+      }
+    } catch (error) {
+      console.error("Request error:", error);
+      setMessage({ type: "error", text: "Unable to connect to server. Make sure backend is running." });
+      setIsLoading(false);
     }
+  };
 
-    alert(data.message);
-
-    console.log("Response:", data);
-
-    navigate("/dashboard");
-  } catch (error) {
-    console.error("Request error:", error);
-
-    alert("Unable to connect to server");
-  }
-};
-  
-  
+  const handleToggle = () => {
+    setIsSignUp(!isSignUp);
+    setMessage(null);
+    setEmail("");
+    setPassword("");
+    setFullName("");
+  };
 
   return (
     <div className="auth-page">
@@ -84,13 +107,32 @@ const handleSubmit = async (e) => {
             </p>
           </div>
 
+          {/* In-page message */}
+          {message && (
+            <div className={`auth-message ${message.type}`}>
+              {message.type === "success" ? (
+                <CheckCircle size={16} />
+              ) : (
+                <AlertCircle size={16} />
+              )}
+              <span>{message.text}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="auth-form">
             {isSignUp && (
               <div className="form-group">
                 <label>Full Name</label>
                 <div className="input-wrapper">
                   <User size={18} />
-                  <input type="text" placeholder="John Doe" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                  <input
+                    type="text"
+                    placeholder="John Doe"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
                 </div>
               </div>
             )}
@@ -99,7 +141,14 @@ const handleSubmit = async (e) => {
               <label>Email Address</label>
               <div className="input-wrapper">
                 <Mail size={18} />
-                <input type="email" placeholder="operator@cyclonex.io" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <input
+                  type="email"
+                  placeholder="operator@cyclonex.io"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
               </div>
             </div>
 
@@ -107,13 +156,29 @@ const handleSubmit = async (e) => {
               <label>Password</label>
               <div className="input-wrapper">
                 <Lock size={18} />
-                <input type="password" placeholder="••••••••" value={password} onChange={(e)=> setPassword(e.target.value)} required />
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
               </div>
             </div>
 
-            <button type="submit" className="auth-submit-btn">
-              {isSignUp ? "Register Account" : "Sign In"}
-              <ArrowRight size={18} />
+            <button type="submit" className="auth-submit-btn" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 size={18} className="spin-icon" />
+                  {isSignUp ? "Creating Account..." : "Signing In..."}
+                </>
+              ) : (
+                <>
+                  {isSignUp ? "Register Account" : "Sign In"}
+                  <ArrowRight size={18} />
+                </>
+              )}
             </button>
           </form>
 
@@ -123,8 +188,9 @@ const handleSubmit = async (e) => {
             </span>
             <button
               type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={handleToggle}
               className="toggle-btn"
+              disabled={isLoading}
             >
               {isSignUp ? "Sign In" : "Create One"}
             </button>
